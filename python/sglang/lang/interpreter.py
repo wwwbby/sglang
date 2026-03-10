@@ -31,10 +31,12 @@ from sglang.lang.ir import (
     SglVarScopeBegin,
     SglVarScopeEnd,
     SglVideo,
+    SglAudio,
 )
 from sglang.utils import (
     encode_image_base64,
     encode_video_base64,
+    encode_audio_base64,
     get_exception_traceback,
 )
 
@@ -287,6 +289,10 @@ class StreamExecutor:
         self.images_ = []
         self.cur_images = []
 
+        # For audio
+        self.audios_ = []
+        self.cur_audios = []
+
         # For fork/join
         self.fork_start_text_pos = None
 
@@ -372,6 +378,7 @@ class StreamExecutor:
             exes[i].cur_role_begin_pos = self.cur_role_begin_pos
             exes[i].fork_start_text_pos = len(self.text_)
             exes[i].images_ = list(self.images_)
+            exes[i].audios_ = list(self.audios_)
 
             # TODO(ying): handle API speculative execution
 
@@ -457,6 +464,8 @@ class StreamExecutor:
             self._execute_image(other)
         elif isinstance(other, SglVideo):
             self._execute_video(other)
+        elif isinstance(other, SglAudio):
+            self._execute_audio(other)
         elif isinstance(other, SglVariable):
             self._execute_variable(other)
         elif isinstance(other, SglVarScopeBegin):
@@ -515,6 +524,27 @@ class StreamExecutor:
         self.images_.append((path, base64_data))
         self.cur_images.append((path, base64_data))
         self.text_ += self.chat_template.image_token
+
+    def _execute_audio(self, expr: SglAudio):
+        path = expr.path
+
+        base64_data = encode_audio_base64(path)
+
+        # import soundfile as sf
+        # import pybase64
+        # from io import BytesIO
+        # audio, original_sr = sf.read(
+        #     BytesIO(pybase64.b64decode(base64_data, validate=True))
+        # )
+        # dur_sec = len(audio) / original_sr
+        # num_mel_frames = int(dur_sec * 100)
+        # input_len = (num_mel_frames - 1) // 2 + 1
+        # output_len = (input_len - 2) // 2 + 1
+        output_len = 1
+
+        self.audios_.append((path, base64_data))
+        self.cur_audios.append((path, base64_data))
+        self.text_ += "<|audio_start|><|audio_pad|><|audio_end|>" * output_len
 
     def _spec_gen(self, sampling_params):
         stop = sampling_params.stop
@@ -575,7 +605,6 @@ class StreamExecutor:
                     self,
                     sampling_params=sampling_params,
                 )
-
             else:
                 if self.backend.is_chat_model:
                     # Speculative execution on models with only chat interface.
@@ -671,7 +700,7 @@ class StreamExecutor:
         _, suffix = self.chat_template.get_prefix_and_suffix(expr.role, self.messages_)
         self._execute_fill(suffix)
 
-        if self.cur_images:
+        if self.cur_images or self.cur_audios:
             # OpenAI vision API format
             last_msg = {
                 "role": expr.role,
@@ -686,8 +715,18 @@ class StreamExecutor:
                         },
                     }
                 )
+            for audio_path, audio_base64_data in self.cur_audios:
+                last_msg["content"].append(
+                    {
+                        "type": "audio_url",
+                        "audio_url": {
+                            "url": f"data:audio/wav;base64,{audio_base64_data}"
+                        },
+                    }
+                )
             self.messages_.append(last_msg)
             self.cur_images = []
+            self.cur_audios = []
         else:
             # OpenAI chat API format
             self.messages_.append({"role": expr.role, "content": new_text})
