@@ -17,6 +17,7 @@ from sglang.lang.ir import (
     SglSelect,
     SglSeparateReasoning,
     SglVideo,
+    SglAudio
 )
 
 
@@ -231,6 +232,10 @@ def image(expr: SglExpr):
 
 def video(path: str, num_frames: int):
     return SglVideo(path, num_frames)
+
+
+def audio(path: str):
+    return SglAudio(path)
 
 
 def select(

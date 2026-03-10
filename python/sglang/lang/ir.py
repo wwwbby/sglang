@@ -447,6 +447,13 @@ class SglVideo(SglExpr):
     def __repr__(self) -> str:
         return f"SglVideo({self.path}, {self.num_frames})"
 
+class SglAudio(SglExpr):
+    def __init__(self, path: str):
+        self.path = path
+
+    def __repr__(self) -> str:
+        return f"SglAudio({self.path})"
+
 
 class SglGen(SglExpr):
     def __init__(

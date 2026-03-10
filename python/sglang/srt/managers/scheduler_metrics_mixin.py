@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import os
 import logging
 import time
+import json
 from collections import defaultdict
 from typing import TYPE_CHECKING, List, Optional
 
@@ -305,6 +307,16 @@ class SchedulerMetricsMixin:
             f"gen throughput (token/s): {self.last_gen_throughput:.2f}, "
             f"#queue-req: {len(self.waiting_queue)}, "
         )
+
+        file_path = f"{os.getcwd()}/sglang_log.jsonl"
+
+        log_data = {
+            "accept_len": f"{spec_accept_length:.2f}",
+            "gen_throughput": f"{self.last_gen_throughput:.2f}"
+        }
+
+        with open(file_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(log_data) + "\n")
 
         logger.info(msg)
         if self.enable_metrics:

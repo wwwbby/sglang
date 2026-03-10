@@ -189,6 +189,16 @@ def encode_image_base64(image_path: Union[str, bytes]):
         return pybase64.b64encode(buffered.getvalue()).decode("utf-8")
 
 
+def encode_audio_base64(audio_path: Union[str, bytes]):
+    """Encode an image in base64."""
+    if isinstance(audio_path, str):
+        with open(audio_path, "rb") as audio_file:
+            data = audio_file.read()
+            return pybase64.b64encode(data).decode("utf-8")
+    elif isinstance(audio_path, bytes):
+        return pybase64.b64encode(audio_path).decode("utf-8")
+
+
 def encode_frame(frame):
     import cv2  # pip install opencv-python-headless
     from PIL import Image

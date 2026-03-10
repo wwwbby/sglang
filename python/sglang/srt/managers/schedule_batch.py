@@ -249,7 +249,10 @@ class MultimodalDataItem:
                 hashed_feature = self.feature
             else:
                 hashed_feature = self.precomputed_embeddings
-            self.hash = hash_feature(hashed_feature)
+
+            # self.hash = hash_feature(hashed_feature)
+            self.hash = hash_feature(hashed_feature.detach().cpu().numpy())
+
         assert self.hash is not None
         self.pad_value = self.hash % (1 << 30)
 

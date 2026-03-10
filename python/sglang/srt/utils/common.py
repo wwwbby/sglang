@@ -829,7 +829,12 @@ def load_audio(
         response.close()
         audio, original_sr = sf.read(audio_file)
     elif isinstance(audio_file, str):
-        audio, original_sr = sf.read(audio_file)
+        try:
+            audio, original_sr = sf.read(
+                BytesIO(pybase64.b64decode(audio_file, validate=True))
+            )
+        except:
+            audio, original_sr = sf.read(audio_file)
     else:
         raise ValueError(f"Invalid audio format: {audio_file}")
 

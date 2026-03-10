@@ -652,6 +652,10 @@ class Qwen3OmniMoeForConditionalGeneration(PreTrainedModel):
                         logger.warning(
                             f"Loaded weight with {name=} not found in params_dict"
                         )
+    def set_eagle3_layers_to_capture(self, layer_ids: Optional[List[int]] = None):
+        self.thinker.set_eagle3_layers_to_capture(layer_ids)
 
+    def get_embed_and_head(self):
+        return self.thinker.get_embed_and_head()
 
 EntryClass = Qwen3OmniMoeForConditionalGeneration
