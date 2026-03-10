@@ -1,7 +1,6 @@
 import atexit
 import json
 import multiprocessing
-import time
 import warnings
 from typing import Dict, List, Optional, Union
 
@@ -105,6 +104,7 @@ class RuntimeEndpoint(BaseBackend):
     def commit_lazy_operations(self, s: StreamExecutor):
         data = {"text": s.text_, "sampling_params": {"max_new_tokens": 0}}
         self._add_images(s, data)
+        self._add_audios(s, data)
         res = http_request(
             self.base_url + "/generate",
             json=data,
@@ -116,6 +116,7 @@ class RuntimeEndpoint(BaseBackend):
     def fill_image(self, s: StreamExecutor):
         data = {"text": s.text_, "sampling_params": {"max_new_tokens": 0}}
         self._add_images(s, data)
+        self._add_audios(s, data)
         res = http_request(
             self.base_url + "/generate",
             json=data,
@@ -182,7 +183,7 @@ class RuntimeEndpoint(BaseBackend):
                 data[item] = value
 
         self._add_images(s, data)
-
+        self._add_audios(s, data)
         res = http_request(
             self.base_url + "/generate",
             json=data,
@@ -223,6 +224,7 @@ class RuntimeEndpoint(BaseBackend):
 
         data["stream"] = True
         self._add_images(s, data)
+        self._add_audios(s, data)
 
         res = http_request(
             self.base_url + "/generate",
@@ -325,6 +327,7 @@ class RuntimeEndpoint(BaseBackend):
 
     def _generate_http_request(self, s: StreamExecutor, data):
         self._add_images(s, data)
+        self._add_audios(s, data)
         res = http_request(
             self.base_url + "/generate",
             json=data,
@@ -338,6 +341,11 @@ class RuntimeEndpoint(BaseBackend):
         if s.images_:
             assert len(s.images_) == 1, "Only support one image."
             data["image_data"] = s.images_[0][1]
+
+    def _add_audios(self, s: StreamExecutor, data):
+        if s.audios_:
+            assert len(s.audios_) == 1, "Only support one image."
+            data["audio_data"] = s.audios_[0][1]
 
     def _assert_success(self, res):
         if res.status_code != 200:
@@ -366,18 +374,10 @@ class Runtime:
     def __init__(
         self,
         log_level: str = "error",
-        launch_timeout: float = 300.0,
         *args,
         **kwargs,
     ):
-        """See the arguments in server_args.py::ServerArgs
-
-        Args:
-            log_level: Log level for the server.
-            timeout: Timeout in seconds for waiting for the server to start.
-            *args: Additional arguments passed to ServerArgs.
-            **kwargs: Additional keyword arguments passed to ServerArgs.
-        """
+        """See the arguments in server_args.py::ServerArgs"""
         # We delay the import of any `sglang.srt` components in `sglang.lang`, so users can run
         # client code without installing SRT server and its dependency if they want.
         from sglang.srt.entrypoints.http_server import launch_server
@@ -397,39 +397,31 @@ class Runtime:
 
         # NOTE: We store pid instead of proc to fix some issues during __delete__
         self.pid = None
+        pipe_reader, pipe_writer = multiprocessing.Pipe(duplex=False)
 
         ctx = multiprocessing.get_context("spawn")
         proc = ctx.Process(
             target=launch_server,
-            args=(self.server_args,),
+            args=(self.server_args, pipe_writer),
         )
         proc.start()
+        pipe_writer.close()
         self.pid = proc.pid
 
         # Before python program terminates, call shutdown implicitly. Therefore, users don't have to explicitly call .shutdown()
         atexit.register(self.shutdown)
 
-        # Wait for server to be ready by polling /health_generate
-        start_time = time.time()
-        with requests.Session() as session:
-            while time.time() - start_time < launch_timeout:
-                try:
-                    response = session.get(f"{self.url}/health_generate")
-                    if response.status_code == 200:
-                        break
-                except requests.RequestException:
-                    pass
+        # TODO: remove this pipe_writer mechanism and use `/health_generate` instead.
+        try:
+            init_state = pipe_reader.recv()
+        except EOFError:
+            init_state = ""
 
-                if not proc.is_alive():
-                    self.shutdown()
-                    raise RuntimeError(
-                        "Initialization failed. Please see the error messages above."
-                    )
-
-                time.sleep(2)
-            else:
-                self.shutdown()
-                raise TimeoutError("Server failed to start within the timeout period.")
+        if init_state != "ready":
+            self.shutdown()
+            raise RuntimeError(
+                "Initialization failed. Please see the error messages above."
+            )
 
         self.endpoint = RuntimeEndpoint(self.url)
 
